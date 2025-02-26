@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket Test</title>
+</head>
+<body>
+  <h1>WebSocket Test for All Sports API</h1>
+  <p>Open your browser's console (Right-click > Inspect > Console) to see live updates.</p>
+  <script>
+    var ws = new WebSocket('https://all-sports-api.onrender.com');
+    ws.onopen = function() {
+      console.log('Connected to /live');
+    };
+    ws.onmessage = function(msg) {
+      console.log('Live Event: ' + msg.data);
+    };
+    ws.onerror = function(error) {
+      console.log('Error: ' + error);
+    };
+    ws.onclose = function() {
+      console.log('Disconnected from /live');
+    };
+  </script>
+</body>
+</html>

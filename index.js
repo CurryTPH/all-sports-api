@@ -156,7 +156,7 @@ app.get('/status', async (req, res) => {
  * /sports:
  *   get:
  *     summary: List all supported sports
- *     description: Returns a list of sports stored in the database
+ *     description: Returns a list of sports stored in the database with sorting options
  *     parameters:
  *       - in: query
  *         name: count
@@ -164,7 +164,23 @@ app.get('/status', async (req, res) => {
  *           type: integer
  *           default: 10
  *         required: false
- *         description: Number of sports to return
+ *         description: Number of sports to return (max 100)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, popularity]
+ *           default: name
+ *         required: false
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         required: false
+ *         description: Sort order (ascending or descending)
  *     responses:
  *       200:
  *         description: List of sports
@@ -182,13 +198,20 @@ app.get('/status', async (req, res) => {
  *                   popularity:
  *                     type: integer
  *       400:
- *         description: Invalid count parameter
+ *         description: Invalid parameters
  */
 app.get('/sports', async (req, res) => {
   try {
-    const count = parseInt(req.query.count) || Infinity;
+    const count = Math.min(parseInt(req.query.count) || 10, 100);
+    const sortBy = req.query.sortBy || 'name';
+    const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
-    const sports = await db.collection('sports').find().limit(count).toArray();
+    if (!['name', 'popularity'].includes(sortBy)) throw new Error('Invalid sortBy parameter');
+    const sports = await db.collection('sports')
+      .find()
+      .sort({ [sortBy]: sortOrder })
+      .limit(count)
+      .toArray();
     res.json(sports);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -200,7 +223,7 @@ app.get('/sports', async (req, res) => {
  * /leagues:
  *   get:
  *     summary: List leagues
- *     description: Returns a list of leagues, optionally filtered by sport
+ *     description: Returns a list of leagues, optionally filtered by sport with sorting options
  *     parameters:
  *       - in: query
  *         name: sport
@@ -214,7 +237,23 @@ app.get('/sports', async (req, res) => {
  *           type: integer
  *           default: 10
  *         required: false
- *         description: Number of leagues to return
+ *         description: Number of leagues to return (max 100)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, teams]
+ *           default: name
+ *         required: false
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         required: false
+ *         description: Sort order (ascending or descending)
  *     responses:
  *       200:
  *         description: List of leagues
@@ -237,10 +276,17 @@ app.get('/sports', async (req, res) => {
 app.get('/leagues', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
-    const count = parseInt(req.query.count) || Infinity;
+    const count = Math.min(parseInt(req.query.count) || 10, 100);
+    const sortBy = req.query.sortBy || 'name';
+    const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
+    if (!['name', 'teams'].includes(sortBy)) throw new Error('Invalid sortBy parameter');
     const query = sportFilter ? { sport: sportFilter } : {};
-    const leagues = await db.collection('leagues').find(query).limit(count).toArray();
+    const leagues = await db.collection('leagues')
+      .find(query)
+      .sort({ [sortBy]: sortOrder })
+      .limit(count)
+      .toArray();
     res.json(leagues);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -252,7 +298,7 @@ app.get('/leagues', async (req, res) => {
  * /fixtures:
  *   get:
  *     summary: List sports fixtures
- *     description: Retrieve a list of sports fixtures with optional filters
+ *     description: Retrieve a list of sports fixtures with extensive filtering and sorting options
  *     parameters:
  *       - in: query
  *         name: sport
@@ -266,7 +312,44 @@ app.get('/leagues', async (req, res) => {
  *           type: integer
  *           default: 5
  *         required: false
- *         description: Number of fixtures to return
+ *         description: Number of fixtures to return (max 100)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [upcoming, completed]
+ *         required: false
+ *         description: Filter by fixture status
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         required: false
+ *         description: Filter fixtures after this date (ISO format, e.g., 2023-08-01T00:00:00Z)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         required: false
+ *         description: Filter fixtures before this date (ISO format, e.g., 2023-12-31T23:59:59Z)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [date, home, away]
+ *           default: date
+ *         required: false
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         required: false
+ *         description: Sort order (ascending or descending)
  *     responses:
  *       200:
  *         description: List of fixtures
@@ -297,10 +380,33 @@ app.get('/leagues', async (req, res) => {
 app.get('/fixtures', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
-    const count = parseInt(req.query.count) || 5;
+    const count = Math.min(parseInt(req.query.count) || 5, 100);
+    const statusFilter = req.query.status || null;
+    const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+    const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+    const sortBy = req.query.sortBy || 'date';
+    const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
-    const query = sportFilter ? { sport: sportFilter } : {};
-    const realFixtures = await db.collection('fixtures').find(query).limit(count).toArray();
+    if (statusFilter && !['upcoming', 'completed'].includes(statusFilter)) throw new Error('Invalid status');
+    if (!['date', 'home', 'away'].includes(sortBy)) throw new Error('Invalid sortBy parameter');
+    if ((startDate && isNaN(startDate)) || (endDate && isNaN(endDate))) throw new Error('Invalid date format');
+
+    const query = {};
+    if (sportFilter) query.sport = sportFilter;
+    if (statusFilter) query.status = statusFilter;
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = startDate.toISOString();
+      if (endDate) query.date.$lte = endDate.toISOString();
+    }
+
+    const realFixtures = await db.collection('fixtures')
+      .find(query)
+      .sort({ [sortBy]: sortOrder })
+      .limit(count)
+      .toArray();
+
     if (realFixtures.length === 0) {
       const mockFixtures = [
         { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming', result: 'TBD' },
@@ -324,7 +430,7 @@ app.get('/fixtures', async (req, res) => {
  * /teams:
  *   get:
  *     summary: List teams
- *     description: Returns a list of teams, optionally filtered by sport or league
+ *     description: Returns a list of teams with extensive filtering and sorting options
  *     parameters:
  *       - in: query
  *         name: sport
@@ -344,7 +450,29 @@ app.get('/fixtures', async (req, res) => {
  *           type: integer
  *           default: 10
  *         required: false
- *         description: Number of teams to return
+ *         description: Number of teams to return (max 100)
+ *       - in: query
+ *         name: location
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by team location (e.g., Dallas)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, location]
+ *           default: name
+ *         required: false
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         required: false
+ *         description: Sort order (ascending or descending)
  *     responses:
  *       200:
  *         description: List of teams
@@ -370,12 +498,24 @@ app.get('/teams', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
     const leagueFilter = req.query.league || null;
-    const count = parseInt(req.query.count) || Infinity;
+    const locationFilter = req.query.location || null;
+    const count = Math.min(parseInt(req.query.count) || 10, 100);
+    const sortBy = req.query.sortBy || 'name';
+    const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
+    if (!['name', 'location'].includes(sortBy)) throw new Error('Invalid sortBy parameter');
+
     const query = {};
     if (sportFilter) query.sport = sportFilter;
     if (leagueFilter) query.league = leagueFilter;
-    const teams = await db.collection('teams').find(query).limit(count).toArray();
+    if (locationFilter) query.location = { $regex: locationFilter, $options: 'i' }; // Case-insensitive search
+
+    const teams = await db.collection('teams')
+      .find(query)
+      .sort({ [sortBy]: sortOrder })
+      .limit(count)
+      .toArray();
     res.json(teams);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -387,7 +527,7 @@ app.get('/teams', async (req, res) => {
  * /players:
  *   get:
  *     summary: List players
- *     description: Returns a list of players, optionally filtered by sport or team
+ *     description: Returns a list of players with extensive filtering and sorting options
  *     parameters:
  *       - in: query
  *         name: sport
@@ -407,7 +547,23 @@ app.get('/teams', async (req, res) => {
  *           type: integer
  *           default: 10
  *         required: false
- *         description: Number of players to return
+ *         description: Number of players to return (max 100)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, team]
+ *           default: name
+ *         required: false
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         required: false
+ *         description: Sort order (ascending or descending)
  *     responses:
  *       200:
  *         description: List of players
@@ -433,12 +589,22 @@ app.get('/players', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
     const teamFilter = req.query.team || null;
-    const count = parseInt(req.query.count) || Infinity;
+    const count = Math.min(parseInt(req.query.count) || 10, 100);
+    const sortBy = req.query.sortBy || 'name';
+    const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
+    if (!['name', 'team'].includes(sortBy)) throw new Error('Invalid sortBy parameter');
+
     const query = {};
     if (sportFilter) query.sport = sportFilter;
     if (teamFilter) query.team = teamFilter;
-    const players = await db.collection('players').find(query).limit(count).toArray();
+
+    const players = await db.collection('players')
+      .find(query)
+      .sort({ [sortBy]: sortOrder })
+      .limit(count)
+      .toArray();
     res.json(players);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -450,7 +616,7 @@ app.get('/players', async (req, res) => {
  * /stats:
  *   get:
  *     summary: Get team or player stats
- *     description: Returns statistics for a specific team or player
+ *     description: Returns statistics for a specific team or player with filtering options
  *     parameters:
  *       - in: query
  *         name: sport

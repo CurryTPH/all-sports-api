@@ -1,24 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WebSocket Test</title>
+  <title>Render WebSocket Test</title>
 </head>
 <body>
-  <h1>WebSocket Test for All Sports API</h1>
-  <p>Open your browser's console (Right-click > Inspect > Console) to see live updates.</p>
+  <h1>Render WebSocket Test for All Sports API</h1>
+  <p>Open your browser's console (Right-click > Inspect > Console) to see live updates from Render.</p>
   <script>
-    var ws = new WebSocket('ws://all-sports-api.onrender.com');
+    var ws = new WebSocket('wss://all-sports-api.onrender.com');
     ws.onopen = function() {
-      console.log('Connected to /live');
+      console.log('Connected to Render /live');
     };
     ws.onmessage = function(msg) {
-      console.log('Live Event: ' + msg.data);
+      console.log('Render Live Event: ' + msg.data);
     };
     ws.onerror = function(error) {
-      console.log('Error: ' + error);
+      console.log('Render Error: ' + error);
     };
     ws.onclose = function() {
-      console.log('Disconnected from /live');
+      console.log('Disconnected from Render /live');
     };
   </script>
 </body>

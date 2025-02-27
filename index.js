@@ -8,16 +8,14 @@ const app = express();
 app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(bodyParser.json());
 app.use(rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute (will scale in paid tiers)
+  windowMs: 60 * 1000,
+  max: 30,
   message: { error: 'Too many requests, retry after 60 seconds' },
   headers: true
 }));
 
-// MongoDB setup
 const uri = 'mongodb+srv://allsportsuser:yourpassword123@allsports-cluster.alpmi.mongodb.net/';
 const client = new MongoClient(uri);
 let db;
@@ -33,9 +31,8 @@ async function connectDB() {
 }
 connectDB();
 
-// WebSocket setup for /live
 const server = app.listen(port, () => {
-  console.log(`API running at http://localhost:${port}`);
+  console.log(`API running on ${process.env.PORT ? 'Render' : 'http://localhost:' + port}`);
 });
 const wss = new WebSocket.Server({ server });
 
@@ -58,7 +55,6 @@ setInterval(() => {
   });
 }, 1000);
 
-// Root route
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to the All Sports API! The ultimate sports data hub.',
@@ -67,7 +63,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Status endpoint
 app.get('/status', async (req, res) => {
   try {
     const dbStatus = await client.db('allsports').command({ ping: 1 });
@@ -83,12 +78,11 @@ app.get('/status', async (req, res) => {
   }
 });
 
-// Docs endpoint with enhanced sandbox
 app.get('/docs', (req, res) => {
   const sampleCall = req.query.sample ? req.query.sample.toLowerCase() : null;
   const docs = {
     endpoints: {
-      '/sports': { description: 'List sports', parameters: { count: 'Number of sports (default: all)' }, example: '/sports?count=3' },
+      '/sports': { description: 'List all supported sports', parameters: { count: 'Number of sports (default: all)' }, example: '/sports?count=3' },
       '/leagues': { description: 'List leagues', parameters: { sport: 'Filter by sport', count: 'Number of leagues' }, example: '/leagues?sport=football&count=2' },
       '/fixtures': { description: 'List fixtures', parameters: { sport: 'Filter by sport', count: 'Number of fixtures (default: 5)' }, example: '/fixtures?sport=basketball&count=3' },
       '/teams': { description: 'List teams', parameters: { sport: 'Filter by sport', league: 'Filter by league', count: 'Number of teams' }, example: '/teams?sport=football&league=NFL' },
@@ -113,7 +107,6 @@ app.get('/docs', (req, res) => {
   }
 });
 
-// /sports endpoint
 app.get('/sports', async (req, res) => {
   try {
     const count = parseInt(req.query.count) || Infinity;
@@ -125,7 +118,6 @@ app.get('/sports', async (req, res) => {
   }
 });
 
-// /leagues endpoint
 app.get('/leagues', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -139,7 +131,6 @@ app.get('/leagues', async (req, res) => {
   }
 });
 
-// /fixtures endpoint (real data sample)
 app.get('/fixtures', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -148,7 +139,6 @@ app.get('/fixtures', async (req, res) => {
     const query = sportFilter ? { sport: sportFilter } : {};
     const realFixtures = await db.collection('fixtures').find(query).limit(count).toArray();
     if (realFixtures.length === 0) {
-      // Mock data as fallback
       const mockFixtures = [
         { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming' },
         { id: 'f2', sport: 'basketball', home: 'Lakers', away: 'Celtics', date: '2025-03-02T20:00:00Z', status: 'upcoming' },
@@ -166,7 +156,6 @@ app.get('/fixtures', async (req, res) => {
   }
 });
 
-// /teams endpoint
 app.get('/teams', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -183,7 +172,6 @@ app.get('/teams', async (req, res) => {
   }
 });
 
-// /players endpoint
 app.get('/players', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -200,7 +188,6 @@ app.get('/players', async (req, res) => {
   }
 });
 
-// /stats endpoint
 app.get('/stats', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -217,7 +204,6 @@ app.get('/stats', async (req, res) => {
   }
 });
 
-// /live endpoint (REST placeholder)
 app.get('/live', (req, res) => {
   const protocol = req.headers.host.includes('render') ? 'wss' : 'ws';
   res.json({
@@ -227,7 +213,6 @@ app.get('/live', (req, res) => {
   });
 });
 
-// /analytics endpoint
 app.get('/analytics', async (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -250,7 +235,6 @@ app.get('/analytics', async (req, res) => {
   }
 });
 
-// /custom endpoint (POST)
 app.post('/custom', async (req, res) => {
   try {
     const count = parseInt(req.query.count) || 5;
@@ -274,7 +258,6 @@ app.post('/custom', async (req, res) => {
   }
 });
 
-// /odds endpoint (mock data)
 app.get('/odds', (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -293,7 +276,6 @@ app.get('/odds', (req, res) => {
   }
 });
 
-// /media endpoint (mock data)
 app.get('/media', (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -312,7 +294,6 @@ app.get('/media', (req, res) => {
   }
 });
 
-// /fanstats endpoint (POST)
 app.post('/fanstats', async (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;

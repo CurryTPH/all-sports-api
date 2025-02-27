@@ -4,10 +4,14 @@ const WebSocket = require('ws');
 const rateLimit = require('express-rate-limit');
 const bodyParser = require('body-parser');
 const tf = require('@tensorflow/tfjs');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+
 const app = express();
 app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 
+// Middleware
 app.use(bodyParser.json());
 app.use(rateLimit({
   windowMs: 60 * 1000,
@@ -16,7 +20,8 @@ app.use(rateLimit({
   headers: true
 }));
 
-const uri = 'mongodb+srv://allsportsuser:mypassword123@allsports-cluster.alpmi.mongodb.net/';
+// MongoDB setup
+const uri = 'mongodb+srv://allsportsuser:MyNewPass2025@allsports-cluster.alpmi.mongodb.net/';
 const client = new MongoClient(uri);
 let db;
 
@@ -31,6 +36,7 @@ async function connectDB() {
 }
 connectDB();
 
+// WebSocket setup
 const server = app.listen(port, () => {
   console.log(`API running on ${process.env.PORT ? 'Render' : 'http://localhost:' + port}`);
 });
@@ -55,14 +61,81 @@ setInterval(() => {
   });
 }, 1000);
 
+// Swagger setup
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'All Sports API',
+      version: '1.0.0',
+      description: 'A free, scalable sports API with real NCAA data and more. Data sourced from CollegeFootballData.com under CC BY 4.0.'
+    },
+    servers: [
+      { url: 'https://all-sports-api.onrender.com', description: 'Production server' },
+      { url: 'http://localhost:3000', description: 'Local development' }
+    ]
+  },
+  apis: ['./index.js']
+};
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @openapi
+ * /:
+ *   get:
+ *     summary: Welcome message
+ *     description: Returns a welcome message with links to documentation and status
+ *     responses:
+ *       200:
+ *         description: Welcome JSON
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 docs:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ */
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to the All Sports API! The ultimate sports data hub.',
-    docs: '/docs',
+    docs: '/api-docs',
     status: '/status'
   });
 });
 
+/**
+ * @openapi
+ * /status:
+ *   get:
+ *     summary: Check API health
+ *     description: Returns the current status of the API, MongoDB, and WebSocket connections
+ *     responses:
+ *       200:
+ *         description: API status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 api:
+ *                   type: string
+ *                 mongodb:
+ *                   type: string
+ *                 websocket:
+ *                   type: string
+ *                 uptime:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *       500:
+ *         description: Status check failed
+ */
 app.get('/status', async (req, res) => {
   try {
     const dbStatus = await client.db('allsports').command({ ping: 1 });
@@ -78,35 +151,39 @@ app.get('/status', async (req, res) => {
   }
 });
 
-app.get('/docs', (req, res) => {
-  const sampleCall = req.query.sample ? req.query.sample.toLowerCase() : null;
-  const docs = {
-    endpoints: {
-      '/sports': { description: 'List all supported sports', parameters: { count: 'Number of sports (default: all)' }, example: '/sports?count=3' },
-      '/leagues': { description: 'List leagues', parameters: { sport: 'Filter by sport', count: 'Number of leagues' }, example: '/leagues?sport=football&count=2' },
-      '/fixtures': { description: 'List fixtures', parameters: { sport: 'Filter by sport', count: 'Number of fixtures (default: 5)' }, example: '/fixtures?sport=basketball&count=3' },
-      '/teams': { description: 'List teams', parameters: { sport: 'Filter by sport', league: 'Filter by league', count: 'Number of teams' }, example: '/teams?sport=football&league=NFL' },
-      '/players': { description: 'List players', parameters: { sport: 'Filter by sport', team: 'Filter by team', count: 'Number of players' }, example: '/players?sport=basketball&team=Los Angeles Lakers' },
-      '/stats': { description: 'Get stats', parameters: { sport: 'Filter by sport', type: 'team or player', id: 'Team/player ID' }, example: '/stats?sport=football&type=player&id=Tom Brady' },
-      '/live': { description: 'WebSocket for live updates (1s delay)', usage: 'Connect via wss://your-url/live', example: 'wss://all-sports-api.onrender.com/live' },
-      '/analytics': { description: 'AI-driven insights', parameters: { sport: 'Sport type', player: 'Player name' }, example: '/analytics?sport=basketball&player=LeBron James' },
-      '/custom': { description: 'Custom data via POST', parameters: { count: 'Number of items', schema: 'JSON body' }, example: 'POST /custom?count=2 with {"schema": {"name": "player"}}' },
-      '/odds': { description: 'Betting odds', parameters: { sport: 'Filter by sport', fixture: 'Fixture ID' }, example: '/odds?sport=football&fixture=f1' },
-      '/media': { description: 'Game media', parameters: { sport: 'Filter by sport', fixture: 'Fixture ID' }, example: '/media?sport=football&fixture=f1' },
-      '/fanstats': { description: 'Submit fan stats via POST', parameters: { sport: 'Sport type', data: 'JSON body' }, example: 'POST /fanstats?sport=football with {"event": "TD", "player": "Tom Brady"}' },
-      '/status': { description: 'API health status', parameters: {}, example: '/status' }
-    },
-    version: '1.0.0',
-    baseUrl: 'https://all-sports-api.onrender.com',
-    note: 'Use ?sample=endpoint to test directly (GET only)'
-  };
-  if (sampleCall && docs.endpoints['/' + sampleCall]) {
-    res.redirect('/' + sampleCall);
-  } else {
-    res.json(docs);
-  }
-});
-
+/**
+ * @openapi
+ * /sports:
+ *   get:
+ *     summary: List all supported sports
+ *     description: Returns a list of sports stored in the database
+ *     parameters:
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         required: false
+ *         description: Number of sports to return
+ *     responses:
+ *       200:
+ *         description: List of sports
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   category:
+ *                     type: string
+ *                   popularity:
+ *                     type: integer
+ *       400:
+ *         description: Invalid count parameter
+ */
 app.get('/sports', async (req, res) => {
   try {
     const count = parseInt(req.query.count) || Infinity;
@@ -118,6 +195,45 @@ app.get('/sports', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /leagues:
+ *   get:
+ *     summary: List leagues
+ *     description: Returns a list of leagues, optionally filtered by sport
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by sport (e.g., football)
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         required: false
+ *         description: Number of leagues to return
+ *     responses:
+ *       200:
+ *         description: List of leagues
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   sport:
+ *                     type: string
+ *                   teams:
+ *                     type: integer
+ *       400:
+ *         description: Invalid parameters
+ */
 app.get('/leagues', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -131,6 +247,53 @@ app.get('/leagues', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /fixtures:
+ *   get:
+ *     summary: List sports fixtures
+ *     description: Retrieve a list of sports fixtures with optional filters
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by sport (e.g., football)
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *         required: false
+ *         description: Number of fixtures to return
+ *     responses:
+ *       200:
+ *         description: List of fixtures
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   sport:
+ *                     type: string
+ *                   home:
+ *                     type: string
+ *                   away:
+ *                     type: string
+ *                   date:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   result:
+ *                     type: string
+ *       400:
+ *         description: Invalid parameters
+ */
 app.get('/fixtures', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -140,9 +303,9 @@ app.get('/fixtures', async (req, res) => {
     const realFixtures = await db.collection('fixtures').find(query).limit(count).toArray();
     if (realFixtures.length === 0) {
       const mockFixtures = [
-        { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming' },
-        { id: 'f2', sport: 'basketball', home: 'Lakers', away: 'Celtics', date: '2025-03-02T20:00:00Z', status: 'upcoming' },
-        { id: 'f3', sport: 'baseball', home: 'Yankees', away: 'Red Sox', date: '2025-03-03T19:00:00Z', status: 'upcoming' }
+        { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming', result: 'TBD' },
+        { id: 'f2', sport: 'basketball', home: 'Lakers', away: 'Celtics', date: '2025-03-02T20:00:00Z', status: 'upcoming', result: 'TBD' },
+        { id: 'f3', sport: 'baseball', home: 'Yankees', away: 'Red Sox', date: '2025-03-03T19:00:00Z', status: 'upcoming', result: 'TBD' }
       ];
       const filteredFixtures = sportFilter
         ? mockFixtures.filter(f => f.sport === sportFilter)
@@ -156,6 +319,53 @@ app.get('/fixtures', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /teams:
+ *   get:
+ *     summary: List teams
+ *     description: Returns a list of teams, optionally filtered by sport or league
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by sport (e.g., football)
+ *       - in: query
+ *         name: league
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by league (e.g., NFL)
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         required: false
+ *         description: Number of teams to return
+ *     responses:
+ *       200:
+ *         description: List of teams
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   sport:
+ *                     type: string
+ *                   league:
+ *                     type: string
+ *                   location:
+ *                     type: string
+ *       400:
+ *         description: Invalid parameters
+ */
 app.get('/teams', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -172,6 +382,53 @@ app.get('/teams', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /players:
+ *   get:
+ *     summary: List players
+ *     description: Returns a list of players, optionally filtered by sport or team
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by sport (e.g., basketball)
+ *       - in: query
+ *         name: team
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by team (e.g., Los Angeles Lakers)
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         required: false
+ *         description: Number of players to return
+ *     responses:
+ *       200:
+ *         description: List of players
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   sport:
+ *                     type: string
+ *                   team:
+ *                     type: string
+ *                   stats:
+ *                     type: object
+ *       400:
+ *         description: Invalid parameters
+ */
 app.get('/players', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -188,6 +445,51 @@ app.get('/players', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /stats:
+ *   get:
+ *     summary: Get team or player stats
+ *     description: Returns statistics for a specific team or player
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Sport of the team or player (e.g., football)
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [team, player]
+ *         required: true
+ *         description: Type of entity (team or player)
+ *       - in: query
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Name of the team or player (e.g., Tom Brady)
+ *     responses:
+ *       200:
+ *         description: Statistics for the entity
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 points:
+ *                   type: integer
+ *                 passingYards:
+ *                   type: integer
+ *                 tds:
+ *                   type: integer
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Entity not found
+ */
 app.get('/stats', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -204,6 +506,27 @@ app.get('/stats', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /live:
+ *   get:
+ *     summary: WebSocket connection info
+ *     description: Provides instructions for connecting to the live WebSocket feed
+ *     responses:
+ *       200:
+ *         description: WebSocket connection details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 url:
+ *                   type: string
+ *                 info:
+ *                   type: string
+ */
 app.get('/live', (req, res) => {
   const protocol = req.headers.host.includes('render') ? 'wss' : 'ws';
   res.json({
@@ -213,6 +536,46 @@ app.get('/live', (req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /analytics:
+ *   get:
+ *     summary: AI-driven player insights
+ *     description: Returns a performance score for a player based on their stats
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Sport of the player (e.g., basketball)
+ *       - in: query
+ *         name: player
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Name of the player (e.g., LeBron James)
+ *     responses:
+ *       200:
+ *         description: Player performance score
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 player:
+ *                   type: string
+ *                 sport:
+ *                   type: string
+ *                 performanceScore:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Player not found
+ */
 app.get('/analytics', async (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -235,6 +598,43 @@ app.get('/analytics', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /custom:
+ *   post:
+ *     summary: Generate custom data
+ *     description: Creates custom data based on a user-defined schema
+ *     parameters:
+ *       - in: query
+ *         name: count
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *         required: false
+ *         description: Number of items to generate (1-100)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               schema:
+ *                 type: object
+ *                 description: Key-value pairs defining field names and types (player, team, number, event)
+ *                 example: {"name": "player", "score": "number"}
+ *     responses:
+ *       200:
+ *         description: List of custom data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       400:
+ *         description: Invalid parameters or schema
+ */
 app.post('/custom', async (req, res) => {
   try {
     const count = parseInt(req.query.count) || 5;
@@ -258,6 +658,50 @@ app.post('/custom', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /odds:
+ *   get:
+ *     summary: Get betting odds
+ *     description: Returns mock betting odds for a specific fixture
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Sport of the fixture (e.g., football)
+ *       - in: query
+ *         name: fixture
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Fixture ID (e.g., f1)
+ *     responses:
+ *       200:
+ *         description: Betting odds
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 fixtureId:
+ *                   type: string
+ *                 sport:
+ *                   type: string
+ *                 bookmaker:
+ *                   type: string
+ *                 homeWin:
+ *                   type: number
+ *                 awayWin:
+ *                   type: number
+ *                 draw:
+ *                   type: number
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Odds not found
+ */
 app.get('/odds', (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -276,6 +720,46 @@ app.get('/odds', (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /media:
+ *   get:
+ *     summary: Get game media
+ *     description: Returns mock media highlights for a specific fixture
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Sport of the fixture (e.g., football)
+ *       - in: query
+ *         name: fixture
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Fixture ID (e.g., f1)
+ *     responses:
+ *       200:
+ *         description: Media highlight
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 fixtureId:
+ *                   type: string
+ *                 sport:
+ *                   type: string
+ *                 highlight:
+ *                   type: string
+ *                 link:
+ *                   type: string
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Media not found
+ */
 app.get('/media', (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;
@@ -294,6 +778,45 @@ app.get('/media', (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /fanstats:
+ *   post:
+ *     summary: Submit fan stats
+ *     description: Allows fans to submit game statistics for review
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Sport for the stats (e.g., football)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               data:
+ *                 type: object
+ *                 description: Stats data (e.g., event, player)
+ *                 example: {"event": "TD", "player": "Tom Brady"}
+ *     responses:
+ *       200:
+ *         description: Submission confirmation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid parameters or data
+ */
 app.post('/fanstats', async (req, res) => {
   try {
     const sport = req.query.sport ? req.query.sport.toLowerCase() : null;

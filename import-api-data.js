@@ -2,7 +2,7 @@ const { MongoClient } = require('mongodb');
 const fs = require('fs');
 
 async function importAPIData() {
-  const uri = 'mongodb+srv://allsportsuser:mypassword123@allsports-cluster.alpmi.mongodb.net/';
+  const uri = 'mongodb+srv://allsportsuser:MyNewPass2025@allsports-cluster.alpmi.mongodb.net/';
   const client = new MongoClient(uri);
   try {
     await client.connect();

@@ -2,7 +2,7 @@ const { MongoClient } = require('mongodb');
 const axios = require('axios');
 
 async function fetchNCAAData() {
-  const uri = 'mongodb+srv://allsportsuser:mypassword123@allsports-cluster.alpmi.mongodb.net/'; // Your actual password
+  const uri = 'mongodb+srv://allsportsuser:MyNewPass2025@allsports-cluster.alpmi.mongodb.net/'; // Your actual password
   const apiKey = '23pW9oZzIZIVYgM4BuOKNqig5PjuSb4RDldB6D4Bb4R7lLMetCDx3LjjV+h7jT8J'; // Your verified key
   const client = new MongoClient(uri);
 

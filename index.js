@@ -12,7 +12,7 @@ const port = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute
+  max: 30, // 30 requests per minute (will scale in paid tiers)
   message: { error: 'Too many requests, retry after 60 seconds' },
   headers: true
 }));
@@ -62,33 +62,52 @@ setInterval(() => {
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to the All Sports API! The ultimate sports data hub.',
-    docs: '/docs'
+    docs: '/docs',
+    status: '/status'
   });
 });
 
-// Docs endpoint with basic sandbox
+// Status endpoint
+app.get('/status', async (req, res) => {
+  try {
+    const dbStatus = await client.db('allsports').command({ ping: 1 });
+    res.json({
+      api: 'online',
+      mongodb: dbStatus.ok === 1 ? 'connected' : 'disconnected',
+      websocket: wss.clients.size > 0 ? 'active' : 'idle',
+      uptime: process.uptime().toFixed(2) + ' seconds',
+      version: '1.0.0'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Status check failed', details: error.message });
+  }
+});
+
+// Docs endpoint with enhanced sandbox
 app.get('/docs', (req, res) => {
   const sampleCall = req.query.sample ? req.query.sample.toLowerCase() : null;
   const docs = {
     endpoints: {
-      '/sports': { description: 'List all supported sports', parameters: { count: 'Number of sports (default: all)' }, example: '/sports?count=3' },
+      '/sports': { description: 'List sports', parameters: { count: 'Number of sports (default: all)' }, example: '/sports?count=3' },
       '/leagues': { description: 'List leagues', parameters: { sport: 'Filter by sport', count: 'Number of leagues' }, example: '/leagues?sport=football&count=2' },
       '/fixtures': { description: 'List fixtures', parameters: { sport: 'Filter by sport', count: 'Number of fixtures (default: 5)' }, example: '/fixtures?sport=basketball&count=3' },
       '/teams': { description: 'List teams', parameters: { sport: 'Filter by sport', league: 'Filter by league', count: 'Number of teams' }, example: '/teams?sport=football&league=NFL' },
       '/players': { description: 'List players', parameters: { sport: 'Filter by sport', team: 'Filter by team', count: 'Number of players' }, example: '/players?sport=basketball&team=Los Angeles Lakers' },
       '/stats': { description: 'Get stats', parameters: { sport: 'Filter by sport', type: 'team or player', id: 'Team/player ID' }, example: '/stats?sport=football&type=player&id=Tom Brady' },
-      '/live': { description: 'WebSocket for live updates (1s delay)', usage: 'Connect via ws://your-url/live', example: 'ws://localhost:3000/live' },
+      '/live': { description: 'WebSocket for live updates (1s delay)', usage: 'Connect via wss://your-url/live', example: 'wss://all-sports-api.onrender.com/live' },
       '/analytics': { description: 'AI-driven insights', parameters: { sport: 'Sport type', player: 'Player name' }, example: '/analytics?sport=basketball&player=LeBron James' },
       '/custom': { description: 'Custom data via POST', parameters: { count: 'Number of items', schema: 'JSON body' }, example: 'POST /custom?count=2 with {"schema": {"name": "player"}}' },
       '/odds': { description: 'Betting odds', parameters: { sport: 'Filter by sport', fixture: 'Fixture ID' }, example: '/odds?sport=football&fixture=f1' },
       '/media': { description: 'Game media', parameters: { sport: 'Filter by sport', fixture: 'Fixture ID' }, example: '/media?sport=football&fixture=f1' },
-      '/fanstats': { description: 'Submit fan stats via POST', parameters: { sport: 'Sport type', data: 'JSON body' }, example: 'POST /fanstats?sport=football with {"event": "TD", "player": "Tom Brady"}' }
+      '/fanstats': { description: 'Submit fan stats via POST', parameters: { sport: 'Sport type', data: 'JSON body' }, example: 'POST /fanstats?sport=football with {"event": "TD", "player": "Tom Brady"}' },
+      '/status': { description: 'API health status', parameters: {}, example: '/status' }
     },
     version: '1.0.0',
-    baseUrl: 'http://localhost:3000' // Update to Render URL after deploy
+    baseUrl: 'https://all-sports-api.onrender.com',
+    note: 'Use ?sample=endpoint to test directly (GET only)'
   };
   if (sampleCall && docs.endpoints['/' + sampleCall]) {
-    res.redirect('/' + sampleCall); // Basic sandbox redirect
+    res.redirect('/' + sampleCall);
   } else {
     res.json(docs);
   }
@@ -120,22 +139,28 @@ app.get('/leagues', async (req, res) => {
   }
 });
 
-// /fixtures endpoint (mock data)
-app.get('/fixtures', (req, res) => {
+// /fixtures endpoint (real data sample)
+app.get('/fixtures', async (req, res) => {
   try {
     const sportFilter = req.query.sport ? req.query.sport.toLowerCase() : null;
     const count = parseInt(req.query.count) || 5;
     if (isNaN(count) || count < 1) throw new Error('Invalid count');
-    const mockFixtures = [
-      { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming' },
-      { id: 'f2', sport: 'basketball', home: 'Lakers', away: 'Celtics', date: '2025-03-02T20:00:00Z', status: 'upcoming' },
-      { id: 'f3', sport: 'baseball', home: 'Yankees', away: 'Red Sox', date: '2025-03-03T19:00:00Z', status: 'upcoming' }
-    ];
-    const filteredFixtures = sportFilter
-      ? mockFixtures.filter(f => f.sport === sportFilter)
-      : mockFixtures;
-    const result = filteredFixtures.slice(0, Math.min(count, filteredFixtures.length));
-    res.json(result);
+    const query = sportFilter ? { sport: sportFilter } : {};
+    const realFixtures = await db.collection('fixtures').find(query).limit(count).toArray();
+    if (realFixtures.length === 0) {
+      // Mock data as fallback
+      const mockFixtures = [
+        { id: 'f1', sport: 'football', home: 'Alabama', away: 'Georgia', date: '2025-03-01T18:00:00Z', status: 'upcoming' },
+        { id: 'f2', sport: 'basketball', home: 'Lakers', away: 'Celtics', date: '2025-03-02T20:00:00Z', status: 'upcoming' },
+        { id: 'f3', sport: 'baseball', home: 'Yankees', away: 'Red Sox', date: '2025-03-03T19:00:00Z', status: 'upcoming' }
+      ];
+      const filteredFixtures = sportFilter
+        ? mockFixtures.filter(f => f.sport === sportFilter)
+        : mockFixtures;
+      res.json(filteredFixtures.slice(0, Math.min(count, filteredFixtures.length)));
+    } else {
+      res.json(realFixtures);
+    }
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -194,9 +219,10 @@ app.get('/stats', async (req, res) => {
 
 // /live endpoint (REST placeholder)
 app.get('/live', (req, res) => {
+  const protocol = req.headers.host.includes('render') ? 'wss' : 'ws';
   res.json({
     message: 'Connect to WebSocket for live updates',
-    url: `ws://${req.headers.host}/live`,
+    url: `${protocol}://${req.headers.host}/live`,
     info: 'Updates every 1 second with mock events'
   });
 });

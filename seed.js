@@ -1,7 +1,7 @@
 const { MongoClient } = require('mongodb');
 
 async function seedData() {
-  const uri = 'mongodb+srv://allsportsuser:yourpassword123@allsports-cluster.alpmi.mongodb.net/';
+  const uri = 'mongodb+srv://allsportsuser:mypassword123@allsports-cluster.alpmi.mongodb.net/';
   const client = new MongoClient(uri);
   try {
     await client.connect();

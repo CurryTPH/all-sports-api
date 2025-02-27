@@ -15,7 +15,7 @@ The ultimate sports data hub—100+ sports, real-time updates, AI analytics, and
 
 ## Run Locally
 ```bash
-git clone https://github.com/your-username/all-sports-api.git
+git clone https://github.com/CurryTPH/all-sports-api.git
 cd all-sports-api
 npm install
 node index.js
